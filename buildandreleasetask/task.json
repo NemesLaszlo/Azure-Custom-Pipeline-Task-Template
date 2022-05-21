@@ -1,0 +1,91 @@
+{
+    "$schema": "https://raw.githubusercontent.com/Microsoft/azure-pipelines-task-lib/master/tasks.schema.json",
+    "id": "custom-id",
+    "name": "AzurePipelineCustomTaskTemplate",
+    "friendlyName": "AzurePipelineCustomTaskTemplate",
+    "description": "Description for the task.",
+    "helpMarkDown": "",
+    "category": "Deploy",
+    "author": "NemesLaszlo",
+    "preview": false,
+    "deprecated":false,
+    "showEnvironmentVariables":false,
+    "runsOn": [ "Agent" ],
+    "version": {
+        "Major": 1,
+        "Minor": 0,
+        "Patch": 0
+    },
+    "instanceNameFormat": "Azure Pipeline Custom Task Template",
+    "inputs": [
+        {
+            "name": "cwd",
+            "aliases": [
+                "workingDirectory"
+            ],
+            "type": "filePath",
+            "label": "Working Directory",
+            "defaultValue": "",
+            "required": false,
+            "helpMarkDown": "Current working directory where the script is run. Empty is the root of the repo (build) or artifacts (release), which is $(System.DefaultWorkingDirectory)",
+            "groupName": "advanced"
+        },
+        {
+            "name": "PAT",
+            "type": "string",
+            "required": true,
+            "label": "Personal Access Token (PAT)",
+            "helpMarkDown": "The Personal Access Key (PAT) to use to access the API"
+        },
+        {
+            "name": "URL",
+            "type": "string",
+            "required": true,
+            "label": "URL to the API",
+            "helpMarkDown": "URL to the application",
+            "defaultValue": "http://localhost:5000"
+        },
+        {
+            "name": "booleanValue",
+            "type": "boolean",
+            "required": true,
+            "defaultValue": false,
+             "label": "Boolean checkbox in the task",
+            "helpMarkDown": "This is a helper information to set up the task field"
+        },
+        {
+            "name": "chunkSize",
+            "type": "string",
+            "required": true,
+            "label": "File upload chunk size (in MB)",
+            "helpMarkDown": "Large files are uploaded in pieces. Use this to specify a chunk size. Must be an integer",
+            "defaultValue": "10"
+        },
+        {
+            "name": "filePathValue",
+            "type": "filePath",
+            "required": true,
+            "label": "File path to the file",
+            "helpMarkDown": "File path to the file for upload in chunks"
+        },
+        {
+            "name": "datePublished",
+            "type": "string",
+            "required": false,
+            "label": "Published date for the something (format: yyyy-MM-dd). Default: today",
+            "helpMarkDown": "The date when something happened. Defaults to today"
+        },
+        {
+            "name": "changelog",
+            "type": "string",
+            "required": false,
+            "label": "Optional. The Changelog text for the example version with each entry in a new line.",
+            "helpMarkDown": "Optional. The Changelog text for the example version with each entry in a new line."
+        }
+    ],
+    "execution": {
+        "Node10": {
+            "target": "index.js"
+        }
+    }
+}

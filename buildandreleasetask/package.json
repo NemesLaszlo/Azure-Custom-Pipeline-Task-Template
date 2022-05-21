@@ -1,13 +1,13 @@
 {
   "name": "buildandreleasetask",
   "version": "1.0.0",
-  "description": "ProductVersion creater and file uploader",
+  "description": "Azure Pipeline Custom Task with product version creation example to presentate a process.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
-  "author": "Laszlo Nemes",
+  "author": "NemesLaszlo",
   "license": "ISC",
   "dependencies": {
     "azure-pipelines-task-lib": "^3.2.0",

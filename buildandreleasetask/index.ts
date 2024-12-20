@@ -118,37 +118,54 @@ async function apiRequest(url: string, method: "GET"|"POST"|"PUT", content? :any
 }
 
 async function uploadFile(filePath: string, tabIndent: number): Promise<any> {
-    console.log(getLogTabs(tabIndent + 1) + `Starting file upload of ${path.basename(filePath)} from: ${filePath}.`);
-
-    if (!fs.existsSync(filePath)) {
-        console.log(`File ${filePath} doens't exist`);
-        throw `File ${filePath} doens't exist`
+    if (!filePath || !filePath.trim()) {
+        console.log(getLogTabs(tabIndent + 1) + "No file path provided. Skipping upload.");
+        return;
     }
-        
-    let fInfo = fs.statSync(filePath);
-    if (!fInfo.size) {
-        console.log(`File ${filePath} is empty`)
-        throw `File ${filePath} is empty`
+
+    console.log(getLogTabs(tabIndent + 1) + `Starting file upload of ${path.basename(filePath)} from: ${filePath}.`);
+    if (!fs.existsSync(filePath)) {
+        console.log(`File ${filePath} doesn't exist.`);
+        throw `File ${filePath} doesn't exist.`;
+    }
+
+    const fileInfo = fs.statSync(filePath);
+    if (!fileInfo.size) {
+        console.log(`File ${filePath} is empty.`);
+        throw `File ${filePath} is empty.`;
     }
 
     console.log(getLogTabs(tabIndent + 1) + "Initiating file upload...");
+    const initializeFile = await apiRequest(`/api/file-upload/initialize`, "GET");
 
-    let initializeFile = await apiRequest(`/api/file-upload/initialize`, "GET");
     console.log("Init file: " + JSON.stringify(initializeFile));
 
-    let chunkNumber = Math.ceil(fInfo.size / chunkSize);
-    console.log(getLogTabs(tabIndent + 1) + `-Uploading data in ${chunkNumber} pieces.`);
+    const chunkCount = Math.ceil(fileInfo.size / chunkSize);
+    console.log(getLogTabs(tabIndent + 1) + `Uploading data in ${chunkCount} chunks.`);
 
-    for(let i = 0; i < chunkNumber; ++i) {
-        let length = i < chunkNumber - 1 ? chunkSize: (fInfo.size - ((chunkNumber - 1) * chunkSize));
+    for (let i = 0; i < chunkCount; ++i) {
+        const start = i * chunkSize;
+        const end = Math.min(start + chunkSize - 1, fileInfo.size - 1);
+        const length = end - start + 1;
 
-        await apiRequest(`/api/file-upload/${initializeFile.fileId}/append`, "POST",
-        fs.createReadStream(filePath, {
-            start: i * chunkSize,
-            end: (i * chunkSize) + length
-        }), true, length, tabIndent + 1);
+        console.log(getLogTabs(tabIndent + 1) + `Uploading chunk ${i + 1} of ${chunkCount}: Start=${start}, End=${end}, Length=${length}`);
+
+        const chunkStream = fs.createReadStream(filePath, { start, end });
+
+        try {
+            await apiRequest(
+                `/api/file-upload/${initializeFile.fileId}/append`,
+                "POST",
+                chunkStream,
+                true,
+                length,
+                tabIndent + 1
+            );
+        } catch (err: any) {
+            console.error(getLogTabs(tabIndent + 1) + `Error uploading chunk ${i + 1}: ${err.message}`);
+            throw err;
+        }
     }
-
     console.log(getLogTabs(tabIndent + 1) + `File upload complete for ${filePath}`);
     return initializeFile.fileId;
 }

@@ -1,184 +1,100 @@
 import tl = require('azure-pipelines-task-lib/task');
-import fetch = require('node-fetch');
-import path = require('path');
-import fs = require('fs');
+import { readInputs } from './inputs';
+import { ApiClient, ApiError } from './apiClient';
+import { uploadFileInChunks } from './fileUpload';
 
-let workingDir: string | undefined;
-let PAT: string | undefined;
-let URL: string | undefined;
-let booleanValue: boolean;
-let chunkSize: number;
+/*
+ * Entry point of the task. The agent runs `node index.js` with every input
+ * exposed as an INPUT_<NAME> environment variable; `azure-pipelines-task-lib`
+ * reads them for us.
+ *
+ * The example flow mirrors a typical "publish a release to an internal service"
+ * task:
+ *   1. read + validate inputs
+ *   2. look the parent resource up and check whether the version already exists
+ *   3. upload one or two files in chunks
+ *   4. create (or update) the version record
+ *   5. expose the resulting id as an output variable
+ *
+ * Replace the API shapes and the flow with whatever your task has to do, but
+ * keep the structure: inputs -> work -> setResult.
+ */
 
-let exampleProduct: any;
-let exampleProductVersionObj: any
+interface Resource {
+    id: string;
+    versions: ResourceVersion[];
+}
 
-async function run() {
-    try {
-        let ch = tl.getInput('chunkSize', true);
-        let chunk = Number.parseInt(ch!);
-        if (!chunk)
-            throw "Chunk size is not specified (or not integer)";
-        chunkSize = chunk * 1024 * 1024;
-        console.log("Chunk size:" + chunkSize);
+interface ResourceVersion {
+    versionId: string;
+    versionString: string;
+    isActive: boolean;
+}
 
-        workingDir = tl.getPathInput('cwd', false) || tl.getVariable('agent.workFolder');
-        PAT = tl.getInput('PAT', true);
-        URL = tl.getInput('URL', true);    
-        booleanValue =  tl.getBoolInput('booleanValue', true);
+interface VersionPayload {
+    versionString: string;
+    isActive: boolean;
+    primaryFileId: string;
+    secondaryFileId?: string;
+    datePublished: string;
+    changelogEntries: string[];
+}
 
-        exampleProduct = await apiRequest("/api/products/" + encodeURIComponent("exampleProductId"), "GET");
+async function run(): Promise<void> {
+    const inputs = readInputs();
+    const client = new ApiClient({ baseUrl: inputs.apiUrl, token: inputs.apiToken });
 
-        console.log("Found product.");
+    console.log(`Looking up resource '${inputs.resourceId}'...`);
+    const resource = await client.get<Resource>(`/api/products/${encodeURIComponent(inputs.resourceId)}`);
 
-        exampleProductVersionObj = "For example check the version already exist with a api request or with the `exampleProduct` object"
+    const existing = resource.versions.find(
+        v => v.versionString.toUpperCase() === inputs.versionString.toUpperCase(),
+    );
 
-        if (exampleProductVersionObj){
-            console.log("Version: " + exampleProductVersionObj + " already exists");
-        } else {
-            console.log("Version: " + exampleProductVersionObj + " does not exists");
-            console.log("Creating Verison");
-
-            console.log("Uploading files to the version. Using base dir: " + workingDir);
-
-            let filePathValueFullPath = getFullPath(tl.getInput('filePathValue', true) || "");
-            let tempIdForTheUploadedFile = await uploadFile(filePathValueFullPath, 1);
-            console.log("File uploaded");
-
-            console.log("Creating new version");
-
-            let datePublished = tl.getInput('datePublished', false) || /^(\d{4}-\d{2}-\d{2})T.+$/.exec(new Date().toISOString())![1];
-            console.log("Date Published: " + datePublished);
-            let changeLog = (tl.getInput('changelog', false) || '').split('\r').join('').split('\n').filter(e => !!e);
-            console.log("Change Log: " + changeLog);
-
-            let newVersion = await apiRequest("/api/product/" + encodeURIComponent("exampleProductId") + "/versions/create", "POST", {
-                booleanValue: booleanValue,
-                UploadedFileTempId: tempIdForTheUploadedFile,
-                datePublished: datePublished,
-                changelogEntries: changeLog
-            });
-
-            console.log("Example version creation was successful. New version: " + newVersion.versionId);
+    if (existing) {
+        switch (inputs.onExisting) {
+            case 'fail':
+                throw new Error(`Version '${inputs.versionString}' already exists for resource '${inputs.resourceId}'.`);
+            case 'skip':
+                tl.warning(`Version '${inputs.versionString}' already exists. Skipping.`);
+                tl.setVariable('createdVersionId', existing.versionId, false, true);
+                tl.setResult(tl.TaskResult.Succeeded, `Version '${inputs.versionString}' already exists; nothing to do.`);
+                return;
+            case 'update':
+                console.log(`Version '${inputs.versionString}' already exists and will be updated.`);
+                break;
         }
     }
-    catch (err: any) {
-        tl.setResult(tl.TaskResult.Failed, err.message);
-    }
+
+    const primaryFileId = await uploadFileInChunks(client, inputs.primaryFilePath, inputs.chunkSizeBytes);
+    const secondaryFileId = inputs.secondaryFilePath
+        ? await uploadFileInChunks(client, inputs.secondaryFilePath, inputs.chunkSizeBytes)
+        : undefined;
+
+    const payload: VersionPayload = {
+        versionString: inputs.versionString,
+        isActive: inputs.markActive,
+        primaryFileId,
+        secondaryFileId,
+        datePublished: inputs.publishDate,
+        changelogEntries: inputs.changelog,
+    };
+
+    const resourcePath = `/api/products/${encodeURIComponent(inputs.resourceId)}/versions`;
+    const version = existing
+        ? await client.put<ResourceVersion>(`${resourcePath}/${encodeURIComponent(existing.versionString)}/edit`, payload)
+        : await client.post<ResourceVersion>(`${resourcePath}/create`, payload);
+
+    // Output variables let later steps use the result: $(stepName.createdVersionId)
+    tl.setVariable('createdVersionId', version.versionId, false, true);
+    tl.setResult(tl.TaskResult.Succeeded, `Version '${version.versionString}' ${existing ? 'updated' : 'created'} (id ${version.versionId}).`);
 }
 
-async function apiRequest(url: string, method: "GET"|"POST"|"PUT", content? :any, isFile: boolean = false, contentLength?: number, tabIndent: number = 0) : Promise<any> {
-    const init: fetch.RequestInit = {
-        method: method,
-        redirect: "follow"
+run().catch((err: unknown) => {
+    // Always throw `Error` objects (never plain strings) so this message is never undefined.
+    const message = err instanceof Error ? err.message : String(err);
+    if (err instanceof ApiError && err.body) {
+        tl.debug(`Response body: ${err.body}`);
     }
-    
-    let u = URL!;
-    if (!u.endsWith("/")){
-        u += "/";
-    }
-    u += url.substr(url.startsWith("/")? 1: 0);
-
-    if (content){
-        let headers = [
-            ['Content-Type', isFile? 'application/octet-stream': 'application/json'],
-            ['Authorization', 'Bearer ' + PAT]
-        ];
-
-        if (isFile && contentLength){
-            headers.push(["Content-Length", contentLength.toString()])
-        }
-
-        init.headers = headers;
-        init.body = !isFile? JSON.stringify(content): content;
-    }
-    else{
-        init.headers = { 'Authorization': 'Bearer ' + PAT };
-    }
-
-    console.log(getLogTabs(tabIndent + 1) + "Sending HTTP " + method + " to " + u)
-
-    return await fetch.default(u, init).catch(err=>{
-        console.log(getLogTabs(tabIndent + 1) + "HTTP request failed. Details: " + JSON.stringify(err));
-        throw "Failed to fetch. Details: " + JSON.stringify(err);
-    }).then(async e=>{
-        if (!e.ok){
-            let bodyJson = null;
-            try{
-                if (e)
-                  bodyJson = JSON.stringify(await e.json());
-            }
-            catch (err){
-            }
-            console.log(getLogTabs(tabIndent + 1) + "HTTP request failed. Code: " + e.status + (bodyJson? ", body: " + bodyJson: ""));
-            throw "API throw an error. Code: " + e.status + (bodyJson? ", body: " + bodyJson: "");
-        }
-        console.log(getLogTabs(tabIndent + 1) + "HTTP request success");
-        return e.json();
-    })
-}
-
-async function uploadFile(filePath: string, tabIndent: number): Promise<any> {
-    if (!filePath || !filePath.trim()) {
-        console.log(getLogTabs(tabIndent + 1) + "No file path provided. Skipping upload.");
-        return;
-    }
-
-    console.log(getLogTabs(tabIndent + 1) + `Starting file upload of ${path.basename(filePath)} from: ${filePath}.`);
-    if (!fs.existsSync(filePath)) {
-        console.log(`File ${filePath} doesn't exist.`);
-        throw `File ${filePath} doesn't exist.`;
-    }
-
-    const fileInfo = fs.statSync(filePath);
-    if (!fileInfo.size) {
-        console.log(`File ${filePath} is empty.`);
-        throw `File ${filePath} is empty.`;
-    }
-
-    console.log(getLogTabs(tabIndent + 1) + "Initiating file upload...");
-    const initializeFile = await apiRequest(`/api/file-upload/initialize`, "GET");
-
-    console.log("Init file: " + JSON.stringify(initializeFile));
-
-    const chunkCount = Math.ceil(fileInfo.size / chunkSize);
-    console.log(getLogTabs(tabIndent + 1) + `Uploading data in ${chunkCount} chunks.`);
-
-    for (let i = 0; i < chunkCount; ++i) {
-        const start = i * chunkSize;
-        const end = Math.min(start + chunkSize - 1, fileInfo.size - 1);
-        const length = end - start + 1;
-
-        console.log(getLogTabs(tabIndent + 1) + `Uploading chunk ${i + 1} of ${chunkCount}: Start=${start}, End=${end}, Length=${length}`);
-
-        const chunkStream = fs.createReadStream(filePath, { start, end });
-
-        try {
-            await apiRequest(
-                `/api/file-upload/${initializeFile.fileId}/append`,
-                "POST",
-                chunkStream,
-                true,
-                length,
-                tabIndent + 1
-            );
-        } catch (err: any) {
-            console.error(getLogTabs(tabIndent + 1) + `Error uploading chunk ${i + 1}: ${err.message}`);
-            throw err;
-        }
-    }
-    console.log(getLogTabs(tabIndent + 1) + `File upload complete for ${filePath}`);
-    return initializeFile.fileId;
-}
-
-function getLogTabs(tabIndent: number){
-    let logPrefix = "";
-    for (let i = 0;i< tabIndent + 1;i++) logPrefix += "\t";
-    return logPrefix;
-}
-
-function getFullPath(p: string) {
-    return path.isAbsolute(p)? p: path.join(workingDir!, p);
-}
-
-run();
-
+    tl.setResult(tl.TaskResult.Failed, message);
+});

@@ -1,0 +1,38 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run task locally",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/buildandreleasetask",
+      "program": "${workspaceFolder}/buildandreleasetask/index.js",
+      "preLaunchTask": "npm: build",
+      "console": "integratedTerminal",
+      "env": {
+        "INPUT_APIURL": "https://example.com",
+        "INPUT_APITOKEN": "local-dev-token",
+        "INPUT_RESOURCEID": "demo",
+        "INPUT_VERSIONSTRING": "1.0.0",
+        "INPUT_ONEXISTING": "fail",
+        "INPUT_MARKACTIVE": "false",
+        "INPUT_PRIMARYFILEPATH": "C:/path/to/installer.zip",
+        "INPUT_CHUNKSIZEMB": "10",
+        "SYSTEM_DEBUG": "true"
+      }
+    },
+    {
+      "name": "Debug tests",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/buildandreleasetask",
+      "program": "${workspaceFolder}/buildandreleasetask/node_modules/mocha/bin/mocha.js",
+      "args": ["tests/_suite.js"],
+      "preLaunchTask": "npm: build",
+      "console": "integratedTerminal",
+      "env": {
+        "TASK_TEST_TRACE": "1"
+      }
+    }
+  ]
+}

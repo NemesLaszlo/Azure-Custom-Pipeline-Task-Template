@@ -1,6 +1,6 @@
 {
     "manifestVersion": 1,
-    "id": "build-release-task-template",
+    "id": "azure-custom-pipeline-task-template",
     "name": "Azure Pipeline Custom Task Template",
     "version": "1.0.0",
     "publisher": "NemesLaszlo",
@@ -8,22 +8,40 @@
         {
             "id": "Microsoft.VisualStudio.Services"
         }
-    ],    
-    "description": "Tools for releasing/managing tasks.",
+    ],
+    "description": "Template extension that ships one custom pipeline task. Replace the id, name, description and task before publishing.",
     "categories": [
         "Azure Pipelines"
     ],
+    "tags": [
+        "pipeline",
+        "task",
+        "template"
+    ],
     "icons": {
-        "default": "images/extension-icon.png"        
+        "default": "images/extension-icon.png"
+    },
+    "content": {
+        "details": {
+            "path": "overview.md"
+        }
+    },
+    "repository": {
+        "type": "git",
+        "uri": "https://github.com/NemesLaszlo/Azure-Custom-Pipeline-Task-Template"
     },
     "files": [
         {
             "path": "buildandreleasetask"
+        },
+        {
+            "path": "images",
+            "addressable": true
         }
     ],
     "contributions": [
         {
-            "id": "custom-build-release-task",
+            "id": "custom-task-template",
             "type": "ms.vss-distributed-task.task",
             "targets": [
                 "ms.vss-distributed-task.tasks"

@@ -1,0 +1,21 @@
+{
+  "name": "azure-custom-pipeline-task-template",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Template repository for Azure DevOps custom pipeline tasks (Node 20 / Node 24, TypeScript, mocha, tfx-cli).",
+  "scripts": {
+    "postinstall": "npm --prefix buildandreleasetask ci",
+    "build": "npm --prefix buildandreleasetask run build",
+    "test": "npm --prefix buildandreleasetask test",
+    "test:trace": "npm --prefix buildandreleasetask run test:trace",
+    "clean": "node scripts/clean.js",
+    "package": "node scripts/package.js",
+    "package:rev": "node scripts/package.js --rev-version"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "tfx-cli": "^0.24.2"
+  }
+}

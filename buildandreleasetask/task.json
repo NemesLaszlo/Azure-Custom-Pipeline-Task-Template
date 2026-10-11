@@ -1,91 +1,171 @@
 {
     "$schema": "https://raw.githubusercontent.com/Microsoft/azure-pipelines-task-lib/master/tasks.schema.json",
-    "id": "custom-id",
-    "name": "AzurePipelineCustomTaskTemplate",
-    "friendlyName": "AzurePipelineCustomTaskTemplate",
-    "description": "Description for the task.",
-    "helpMarkDown": "",
+    "id": "1081bded-8248-4860-8bc8-c11abbef37d1",
+    "name": "CustomTaskTemplate",
+    "friendlyName": "Custom Task Template",
+    "description": "Template task: uploads a file in chunks to an HTTP API and creates a version record. Replace with your own logic.",
+    "helpMarkDown": "[Learn more about this task](https://github.com/NemesLaszlo/Azure-Custom-Pipeline-Task-Template)",
     "category": "Deploy",
     "author": "NemesLaszlo",
     "preview": false,
-    "deprecated":false,
-    "showEnvironmentVariables":false,
-    "runsOn": [ "Agent" ],
+    "deprecated": false,
+    "showEnvironmentVariables": false,
+    "runsOn": [
+        "Agent"
+    ],
     "version": {
         "Major": 1,
         "Minor": 0,
         "Patch": 0
     },
-    "instanceNameFormat": "Azure Pipeline Custom Task Template",
+    "instanceNameFormat": "Publish version $(versionString) of $(resourceId)",
+    "groups": [
+        {
+            "name": "files",
+            "displayName": "Files",
+            "isExpanded": true
+        },
+        {
+            "name": "advanced",
+            "displayName": "Advanced",
+            "isExpanded": false
+        }
+    ],
     "inputs": [
         {
-            "name": "cwd",
-            "aliases": [
-                "workingDirectory"
-            ],
+            "name": "apiUrl",
+            "type": "string",
+            "label": "API base URL",
+            "defaultValue": "https://example.com",
+            "required": true,
+            "helpMarkDown": "Base URL of the API the task talks to, for example `https://my-service.example.com`."
+        },
+        {
+            "name": "apiToken",
+            "type": "string",
+            "label": "API token",
+            "defaultValue": "",
+            "required": true,
+            "helpMarkDown": "Bearer token used to call the API. Store it as a **secret pipeline variable** and reference it here as `$(MyApiToken)`. The task masks the value in logs."
+        },
+        {
+            "name": "resourceId",
+            "type": "string",
+            "label": "Resource ID",
+            "defaultValue": "",
+            "required": true,
+            "helpMarkDown": "Identifier of the resource (for example a product) the new version belongs to."
+        },
+        {
+            "name": "versionString",
+            "type": "string",
+            "label": "Version",
+            "defaultValue": "$(Build.BuildNumber)",
+            "required": true,
+            "helpMarkDown": "Version string to create, for example `1.4.0`."
+        },
+        {
+            "name": "onExisting",
+            "type": "pickList",
+            "label": "If the version already exists",
+            "defaultValue": "fail",
+            "required": true,
+            "options": {
+                "fail": "Fail the task",
+                "skip": "Skip (succeed with a warning)",
+                "update": "Update the existing version"
+            },
+            "helpMarkDown": "What to do when a version with the same version string already exists."
+        },
+        {
+            "name": "markActive",
+            "type": "boolean",
+            "label": "Mark the version as active",
+            "defaultValue": "false",
+            "required": false,
+            "helpMarkDown": "When checked the new version becomes the active (default) version."
+        },
+        {
+            "name": "primaryFilePath",
             "type": "filePath",
-            "label": "Working Directory",
+            "label": "Primary file",
+            "defaultValue": "",
+            "required": true,
+            "groupName": "files",
+            "helpMarkDown": "File to upload, for example the installer `.zip`. Relative paths are resolved against the working directory."
+        },
+        {
+            "name": "secondaryFilePath",
+            "type": "filePath",
+            "label": "Secondary file (optional)",
             "defaultValue": "",
             "required": false,
-            "helpMarkDown": "Current working directory where the script is run. Empty is the root of the repo (build) or artifacts (release), which is $(System.DefaultWorkingDirectory)",
-            "groupName": "advanced"
+            "groupName": "files",
+            "helpMarkDown": "Optional second file to upload, for example documentation. Leave empty to skip."
         },
         {
-            "name": "PAT",
+            "name": "publishDate",
             "type": "string",
-            "required": true,
-            "label": "Personal Access Token (PAT)",
-            "helpMarkDown": "The Personal Access Key (PAT) to use to access the API"
-        },
-        {
-            "name": "URL",
-            "type": "string",
-            "required": true,
-            "label": "URL to the API",
-            "helpMarkDown": "URL to the application",
-            "defaultValue": "http://localhost:5000"
-        },
-        {
-            "name": "booleanValue",
-            "type": "boolean",
-            "required": true,
-            "defaultValue": false,
-             "label": "Boolean checkbox in the task",
-            "helpMarkDown": "This is a helper information to set up the task field"
-        },
-        {
-            "name": "chunkSize",
-            "type": "string",
-            "required": true,
-            "label": "File upload chunk size (in MB)",
-            "helpMarkDown": "Large files are uploaded in pieces. Use this to specify a chunk size. Must be an integer",
-            "defaultValue": "10"
-        },
-        {
-            "name": "filePathValue",
-            "type": "filePath",
-            "required": true,
-            "label": "File path to the file",
-            "helpMarkDown": "File path to the file for upload in chunks"
-        },
-        {
-            "name": "datePublished",
-            "type": "string",
+            "label": "Publish date (yyyy-MM-dd)",
+            "defaultValue": "",
             "required": false,
-            "label": "Published date for the something (format: yyyy-MM-dd). Default: today",
-            "helpMarkDown": "The date when something happened. Defaults to today"
+            "helpMarkDown": "Date to record as the publish date. Defaults to today (UTC)."
         },
         {
             "name": "changelog",
-            "type": "string",
+            "type": "multiLine",
+            "label": "Changelog",
+            "defaultValue": "",
             "required": false,
-            "label": "Optional. The Changelog text for the example version with each entry in a new line.",
-            "helpMarkDown": "Optional. The Changelog text for the example version with each entry in a new line."
+            "properties": {
+                "resizable": "true",
+                "rows": "6"
+            },
+            "helpMarkDown": "One changelog entry per line. Empty lines are ignored."
+        },
+        {
+            "name": "chunkSizeMb",
+            "type": "int",
+            "label": "Upload chunk size (MB)",
+            "defaultValue": "10",
+            "required": true,
+            "groupName": "advanced",
+            "helpMarkDown": "Large files are uploaded in chunks of this size. Must be a positive integer."
+        },
+        {
+            "name": "workingDirectory",
+            "type": "filePath",
+            "label": "Working directory",
+            "defaultValue": "",
+            "required": false,
+            "groupName": "advanced",
+            "helpMarkDown": "Base directory for relative file paths. Defaults to `$(System.DefaultWorkingDirectory)`."
         }
     ],
+    "outputVariables": [
+        {
+            "name": "createdVersionId",
+            "description": "Identifier of the version that was created, updated or found."
+        }
+    ],
+    "restrictions": {
+        "commands": {
+            "mode": "restricted"
+        },
+        "settableVariables": {
+            "allowed": [
+                "createdVersionId"
+            ]
+        }
+    },
     "execution": {
         "Node20_1": {
-            "target": "index.js"
+            "target": "index.js",
+            "argumentFormat": ""
+        },
+        "Node24": {
+            "target": "index.js",
+            "argumentFormat": ""
         }
     }
 }

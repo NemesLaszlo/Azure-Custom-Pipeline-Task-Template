@@ -220,6 +220,8 @@ If you have tasks created from the previous version of this template (`node-fetc
 
 - The global `fetch` does not honour the agent proxy settings (`Agent.ProxyUrl`). If your agents sit behind a proxy, read `tl.getHttpProxyConfiguration()` and pass an `undici` `ProxyAgent` as the `dispatcher` in `apiClient.ts`.
 - The VSIX size limit is 50 MB; keep `node_modules` lean (the package script already prunes dev dependencies).
+- `npm audit` may flag transitive packages pulled in by `azure-pipelines-task-lib` itself (for example `braces` via `shelljs`). They only run against patterns the task supplies, never against pipeline input; if no patched version exists, dismiss the alert as "vulnerable code is not actually used" and let Dependabot pick up the fix when Microsoft ships one.
+- Keep `@types/node` on the same major as the Node handler in `task.json` (24 today); `dependabot.yml` ignores major bumps of it for that reason.
 - `showEnvironmentVariables` in `task.json` is `false`; set it to `true` only if your task needs an *Environment variables* section in the classic editor.
 - Cancellation: the agent sends `SIGINT`/`SIGTERM`. Add `process.on('SIGTERM', ...)` in `index.ts` if your task has to clean something up.
 

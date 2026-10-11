@@ -41,7 +41,7 @@ jobs:
             buildandreleasetask/package-lock.json
       - run: npm ci
       - run: node scripts/package.js --skip-tests
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: vsix
           path: dist/*.vsix
